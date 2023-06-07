@@ -1,101 +1,53 @@
-import Text.Parsec
-
-type Programa = String
 type Estado = String
 type Rotulo = String
-type Aresta = (Estado, Rotulo, Estado)
+type Aresta = (Estado, Rotulo, Estado) -- 1 --b2--> 2
 type Frame = ([Estado], [Aresta])
 
-type Parser a = Parsec String () a
-
-data Formula
-  = Atom Rotulo Estado
-  | Neg Formula
-  | And Formula Formula
-  | Or Formula Formula
-  | Exists Rotulo Estado Formula
-  | Program Programa
+data Programa
+  = Atom Programa -- alpha
+  | Sequence Programa -- alpha;b1
+  | Or Programa Programa -- alpha; 1? v ~1?
+  | Iterator Programa -- alpha; (1?;b1)*
+  | NotExists Programa -- alpha;~1?
+  | Exists Programa -- alpha;1?
   deriving (Show)
+-- Pergunta para Prof: And, Box, Diamond: precisam?
 
+data No = No{ -- Árvore
+    programa :: [Programa], -- Lista de Programas
+    esquerdo :: No,
+    direito :: No
+}
+
+-- Main de exemplo:
+-- Elevador de 2 andares que somente sobe
 main :: IO ()
 main = do
-  let frame = (["1", "2"], [("1", "b2", "2"), ("1", "b1", "1"), ("2", "b2", "2"), ("2", "b1", "1")])
-      programa = "r"
-      formula = "[]r v(?b1 ;1)(?b2 ;2)"
-  case parse formulaParser "" formula of
-    Left err -> putStrLn ("Erro de análise sintática: " ++ show err)
-    Right parsedFormula -> putStrLn (verificarFormula frame programa parsedFormula)
+  let frame = (["1", "2"], [("1", "b2", "2"), ("1", "b1", "1"), ("2", "b2", "2")]);
+  let input = ";(P)v(;(?(b1))(;(?(1))P), v((;(?(b2))(;(?(1));(P)P)),(;(?(2))P)))";
+  print frame;
+  print input;
+  return ();
+  -- P;(b1?;(1?;P))v(b2?;(1?;P;P)v(2?;P))
 
-parseFormula :: String -> Either String Formula
-parseFormula input = case parse formulaParser "" input of
-  Left err -> Left (show err)
-  Right formula -> Right formula
 
-formulaParser :: Parser Formula
-formulaParser = spaces *> (atomParser <|> negParser <|> andParser <|> orParser <|> existsParser <|> programParser) <* spaces
+--TODO Gyselle - Alterar a main para aceitar input:
+--1. Perguntar se a pessoa quer colocar um problema (S/N)
+--1.1. Caso a pessoa não queira rodar um programa, rodar o exemplo nosso.
+--1.2. Caso sim, perguntar os estados, as relações, e o programa.
 
-atomParser :: Parser Formula
-atomParser = Atom <$> rotuloParser <*> estadoParser
+--TODO Gyselle - Parser:
+--1. Transformar String de input em uma árvore de programas
+--1.1. A cada v deve ter uma bifurcação (isso OU aquilo)
+--1.2. A cada * deve ter uma bifurcação (se executar 0 vezes ou 1/mais vezes)
 
-negParser :: Parser Formula
-negParser = Neg <$ char '~' <*> formulaParser
+--TODO Amanda - Verificar programa:
+--1. Ver se o frame é válido para o programa em questão.
+--1.1. Se o programa é atómico, o frame é válido.
+--1.2. Se não, checar a árvore.
+--1.2.1. Cada parte de programa sequencial precisa ser possível no frame, inclusive as bifurcações.
 
-andParser :: Parser Formula
-andParser = And <$ char '^' <*> formulaParser <*> formulaParser
-
-orParser :: Parser Formula
-orParser = Or <$ char 'v' <*> formulaParser <*> formulaParser
-
-existsParser :: Parser Formula
-existsParser = Exists <$ string "(?" <*> rotuloParser <* char ';' <*> estadoParser <* char ')' <*> formulaParser
-
-programParser :: Parser Formula
-programParser = Program <$> many1 letter
-
-rotuloParser :: Parser Rotulo
-rotuloParser = many1 letter
-
-estadoParser :: Parser Estado
-estadoParser = many1 digit
-
-verificarFormula :: Frame -> Programa -> Formula -> String
-verificarFormula frame programa formula = case evalFormula frame programa formula of
-  Left err -> err
-  Right True -> "Essa fórmula é válida nesse frame."
-  Right False -> "Essa fórmula não é válida nesse frame, ponto de incompatibilidade: " ++ getIncompatibilityPoint frame formula
-
-evalFormula :: Frame -> Programa -> Formula -> Either String Bool
-evalFormula frame programa (Atom r e) = Right (relacaoValida frame (e, r, e))
-evalFormula frame programa (Neg f) = case evalFormula frame programa f of
-  Right True -> Right False
-  Right False -> Right True
-  Left err -> Left err
-evalFormula frame programa (And f1 f2) = case (evalFormula frame programa f1, evalFormula frame programa f2) of
-  (Right True, Right True) -> Right True
-  (Right _, Right _) -> Right False
-  (Left err, _) -> Left err
-  (_, Left err) -> Left err
-evalFormula frame programa (Or f1 f2) = case (evalFormula frame programa f1, evalFormula frame programa f2) of
-  (Right False, Right False) -> Right False
-  (Right _, Right _) -> Right True
-  (Left err, _) -> Left err
-  (_, Left err) -> Left err
-evalFormula frame programa (Exists r x f) = case lookup r env of
-  Just e -> evalFormula frame programa f
-  Nothing -> Left ("Rótulo não encontrado no ambiente: " ++ r)
-  where
-    env = [(x, e) | (_, e, _) <- snd frame]
-evalFormula frame programa (Program p) = case programa of
-  [p'] | programa == [p'] -> Right True
-  _ -> Right False
-
-relacaoValida :: Frame -> Aresta -> Bool
-relacaoValida (estados, arestas) (origem, rotulo, destino) = elem origem estados && elem destino estados && elem (origem, rotulo, destino) arestas
-
-getIncompatibilityPoint :: Frame -> Formula -> String
-getIncompatibilityPoint _ (Atom _ _) = "na fórmula atômica"
-getIncompatibilityPoint frame (Neg f) = "na negação da fórmula: " ++ getIncompatibilityPoint frame f
-getIncompatibilityPoint frame (And f1 f2) = "na conjunção das fórmulas: " ++ getIncompatibilityPoint frame f1 ++ " e " ++ getIncompatibilityPoint frame f2
-getIncompatibilityPoint frame (Or f1 f2) = "na disjunção das fórmulas: " ++ getIncompatibilityPoint frame f1 ++ " e " ++ getIncompatibilityPoint frame f2
-getIncompatibilityPoint frame (Exists r x f) = "na fórmula com rótulo " ++ r ++ " e variável " ++ x ++ ": " ++ getIncompatibilityPoint frame f
-getIncompatibilityPoint _ (Program _) = "no programa"
+-- TODO Amanda - Reporte incompatibilidade do frame:
+--1. Caso em uma parte da árvore o frame esteja inválido:
+--1.1. Reportar essa parte e interromper a execução do programa.
+--1.2. O reporte deve conter a relação em que é inválido, e a parte do programa correspondente.
