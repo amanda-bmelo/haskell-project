@@ -19,16 +19,44 @@ data No = No{ -- Árvore
     direito :: No
 }
 
+adicionarProblema :: IO (Frame, String)
+adicionarProblema = do
+  putStrLn "Deseja adicionar um problema? (S/N)"
+  resposta <- getLine
+  if resposta == "S" || resposta == "s" then do
+    putStrLn "Digite os estados separados por espaço:"
+    estadosInput <- getLine
+    let estados = words estadosInput
+
+    putStrLn "Digite as relações no formato 'estado1 rotulo estado2':"
+    relacoesInput <- getLine
+    let relacoes = lerRelacoes relacoesInput
+
+    putStrLn "Digite o programa:"
+    programaInput <- getLine
+
+    return ((estados, relacoes), programaInput)
+  else
+    return (defaultFrame, defaultProgram)
+  where
+    lerRelacoes :: String -> [Aresta]
+    lerRelacoes input = read $ "[" ++ input ++ "]"
+
+    defaultFrame :: Frame
+    defaultFrame = (["1", "2"], [("1", "b2", "2"), ("1", "b1", "1"), ("2", "b2", "2")])
+
+    defaultProgram :: String
+    defaultProgram = ";(P)v(;(?(b1))(;(?(1))P), v((;(?(b2))(;(?(1));(P)P)),(;(?(2))P)))"
+
 -- Main de exemplo:
 -- Elevador de 2 andares que somente sobe
 main :: IO ()
 main = do
-  let frame = (["1", "2"], [("1", "b2", "2"), ("1", "b1", "1"), ("2", "b2", "2")]);
-  let input = ";(P)v(;(?(b1))(;(?(1))P), v((;(?(b2))(;(?(1));(P)P)),(;(?(2))P)))";
+  (frame, input) <- adicionarProblema
   print frame;
   print input;
   return ();
-  -- P;(b1?;(1?;P))v(b2?;(1?;P;P)v(2?;P))
+  
 
 
 --TODO Gyselle - Alterar a main para aceitar input:
