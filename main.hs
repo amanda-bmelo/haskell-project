@@ -1,16 +1,10 @@
-type Gatilho = String
-type Estado = String
-type Rotulo = String
-type Aresta = (Estado, Rotulo, Estado) -- 1 --b2--> 2
-type Frame = ([Estado], [Aresta])
-
-operadores = [";", "*", "~", "v", "?"]
--- Pergunta para Prof: And, Box, Diamond: precisam?
-data Tree = Tree {
-  node :: [String],
-  nodes :: [Tree]
+data Frame = Frame {
+  states :: [String], 
+  relations :: [(String, String, String)]
 }
 
+
+-- Função realizada por Gyselle
 adicionarProblema :: IO (Frame, String)
 adicionarProblema = do
   putStrLn "Deseja adicionar um problema? (S/N)"
@@ -27,53 +21,85 @@ adicionarProblema = do
     putStrLn "Digite o programa, sabendo que P representa o programa:"
     programaInput <- getLine
 
-    return ((estados, relacoes), programaInput)
+    return (Frame estados relacoes, programaInput)
   else
     return (defaultFrame, defaultProgram)
   where
-    lerRelacoes :: String -> [Aresta]
+    lerRelacoes :: String -> [(String, String, String)]
     lerRelacoes input = read $ "[" ++ input ++ "]"
 
     defaultFrame :: Frame
-    defaultFrame = (["1", "2"], [("1", "b2", "2"), ("1", "b1", "1"), ("2", "b2", "2")])
+    defaultFrame = Frame ["1", "2"] [("1", "A", "2"), ("1", "B", "1"), ("2", "A", "2")]
 
     defaultProgram :: String
-    defaultProgram = ";(P)v(;(?(b1))(;(?(1))P),v((;(?(b2))(;(?(1));(P)P)),(;(?(2))P)))" -- P; (b1?;1?;P) v (b2?;(1?;P;P)v(2?;P)))
+    defaultProgram = "v(;(*(A),B),A)" -- (A* ; B) v A || T=14
 
-
--- main :: IO ()
--- main = do
---   (frame, input) <- adicionarProblema
---   print frame;
---   print input;
---   return ();
-  
--- Main de exemplo:
--- Elevador de 2 andares que somente sobe
+-- Função realizada por Gyselle
 main :: IO ()
 main = do
-  -- (1) --b1--> (1) --b2--> (2) --b2--> (2)
-  let frame = (["1", "2", "3"], [("1", "b2", "2"), ("1", "b1", "1"), ("2", "b2", "2")]);
-      trigger = "P";
-      tree = Tree ["P"] [ Tree ["b1","?","1","?"] [], Tree ["b2", "?", "1", "?", "2", "?"] []]; -- Usar só strings mesmo
-
+  (frame, input) <- adicionarProblema
+  print (head (states frame));
+  print input;
   return ();
 
---TODO Gyselle - Parser:
---1. Transformar String de input em uma árvore de programas
---1.1. A cada v deve ter uma bifurcação (isso OU aquilo)
---1.2. A cada * deve ter uma bifurcação (se executar 0 vezes ou 1/mais vezes)
--- Ex: (1?;b1)* 2?
--- No: 1? --> No: b1 -->: No: 2?
--- No: 2?
+isValidFrame :: Frame -> String -> String
+isValidFrame frame programa
+  | x == "!" = head result
+  | otherwise =  "Frame válido."
+  where (x:result) = checkFrame frame programa 0 (take 1 (states frame)) []
 
---TODO Amanda - Verificar programa:
---1. Ver se o frame é válido para o programa em questão.
---1.1. Se o programa é atómico, o frame é válido.
---1.2. Se não, checar a árvore.
---1.2.1. Cada parte de programa sequencial precisa ser possível no frame, inclusive as bifurcações.
+checkFrame :: Frame -> String -> Int -> [String] -> [String] -> [String]
+checkFrame _ "" _ _ results = results
+checkFrame frame (x:xs) index history results
+  | x == ';' = checkSequence frame xs (index+1) history results
+  | x == 'v' = checkOr frame xs (index+1) history results
+  | x == '*' = checkIterator frame xs (index+1) history results
+  | x == '?' = checkExists frame xs (index+1) history results
+  | otherwise = checkAtom frame xs (index+1) history results
 
---TODO Amanda - Reporte incompatibilidade do frame:
---1. Caso em uma parte da árvore o frame esteja inválido:
---1.1. Reportar essa parte e interromper a execução do programa.
---1.2. O reporte deve conter a relação em que é inválido, e a parte do programa correspondente.
+checkAtom :: Frame -> String -> Int -> [String] -> [String] -> [String]
+checkAtom _ "" _ _ results = results
+checkAtom frame (x:xs) index (last_state:history) results
+  | any (\(current_state, alpha, _) -> (alpha == [x] && current_state == last_state)) (relations frame) = checkFrame frame xs (index+1) history ("Frame válido":results)
+  | otherwise = checkFrame frame xs (index+1) history ("!":(("Incompatibilidade no estado "++last_state++", no index "++(show index)):results))
+
+checkSequence :: Frame -> String -> Int -> [String] -> [String] -> [String]
+checkSequence _ "" _ _ results = results
+checkSequence frame (_:xs) index history results = result3 
+  where
+    end = findEndBlock xs 1 (index+1)
+    middle = findMiddleBlock xs 1 1
+    listSeq = listBlock xs (middle-2) (end-index-2)
+    result1 = checkFrame frame (head listSeq) (index+1) history results
+    result2 = if head result1 /= "!" then checkFrame frame (last listSeq) (index+middle) history results else result1
+    result3 = checkFrame frame (drop (length xs - end) xs) end history result2
+  
+
+checkOr :: Frame -> String -> Int -> [String] -> [String] -> [String]
+checkOr _ "" _ _ results = results
+
+checkIterator :: Frame -> String -> Int -> [String] -> [String] -> [String]
+checkIterator _ "" _ _ results = results
+
+checkExists :: Frame -> String -> Int -> [String] -> [String] -> [String]
+checkExists _ "" _ _ results = results
+
+findEndBlock :: String -> Int -> Int -> Int
+findEndBlock _ 0 end = end
+findEndBlock (x:program) opened end
+  | x == '(' = findEndBlock program (opened+1) (end+1)
+  | x == ')' = findEndBlock program (opened-1) (end+1)
+  | otherwise = findEndBlock program opened (end+1)
+
+findMiddleBlock :: String -> Int -> Int -> Int
+findMiddleBlock _ 0 end = end
+findMiddleBlock (x:program) comma end
+  | x == 'v' = findMiddleBlock program (comma+1) (end+1)
+  | x == ';' = findMiddleBlock program (comma+1) (end+1)
+  | x == ',' = findMiddleBlock program (comma-1) (end+1)
+  | otherwise = findMiddleBlock program comma (end+1)
+
+listBlock :: String -> Int -> Int -> [String]
+listBlock block endBlock middleBlock = [take middleBlock block, drop (endBlock-middleBlock-1) block]
+  
+
