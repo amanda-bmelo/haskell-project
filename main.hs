@@ -83,6 +83,14 @@ checkIterator _ "" _ _ results = results
 
 checkExists :: Frame -> String -> Int -> [String] -> [String] -> [String]
 checkExists _ "" _ _ results = results
+checkExists frame (x:xs) index history results =
+  if x == '?'
+    then
+      let result1 = checkFrame frame xs (index+1) history results
+          result2 = if head result1 /= "!" then checkFrame frame (drop 1 xs) (index+1) history results else result1
+      in checkExists frame (dropWhile (/= ';') xs) (index+1) history result2
+    else
+      checkSequence frame (x:xs) index history results
 
 findEndBlock :: String -> Int -> Int -> Int
 findEndBlock _ 0 end = end
