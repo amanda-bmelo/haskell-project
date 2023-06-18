@@ -58,13 +58,11 @@ checkFrame frame (x:xs) index history results
   | otherwise = checkAtom frame xs (index+1) history results
 
 checkAtom :: Frame -> String -> Int -> [String] -> [String] -> [String]
-checkAtom _ "" _ _ results = results
 checkAtom frame (x:xs) index (last_state:history) results
-  | any (\(current_state, alpha, _) -> (alpha == [x] && current_state == last_state)) (relations frame) = checkFrame frame xs (index+1) history ("Frame válido":results)
-  | otherwise = checkFrame frame xs (index+1) history ("!":(("Incompatibilidade no estado "++last_state++", no index "++(show index)):results))
+  | any (\(current, alpha, next) -> (alpha == [x] && current == last_state)) (relations frame) = checkFrame frame xs (index+1) (next:history) ("Frame válido":results)
+  | otherwise = checkFrame frame xs (index+1) history (["!",("Incompatibilidade no estado "++last_state++", no index "++(show index))]++results)
 
 checkSequence :: Frame -> String -> Int -> [String] -> [String] -> [String]
-checkSequence _ "" _ _ results = results
 checkSequence frame (_:xs) index history results = result3 
   where
     end = findEndBlock xs 1 (index+1)
@@ -76,10 +74,37 @@ checkSequence frame (_:xs) index history results = result3
   
 
 checkOr :: Frame -> String -> Int -> [String] -> [String] -> [String]
-checkOr _ "" _ _ results = results
+checkOr frame (_:xs) index history results = result3 
+  where
+    end = findEndBlock xs 1 (index+1)
+    middle = findMiddleBlock xs 1 1
+    listSeq = listBlock xs (middle-2) (end-index-2)
+    result1 = checkFrame frame (head listSeq) (index+1) history results
+    result2 = if head result1 == "!" then checkFrame frame (last listSeq) (index+middle) history results else result1
+    result3 = checkFrame frame (drop (length xs - end) xs) end history result2
 
 checkIterator :: Frame -> String -> Int -> [String] -> [String] -> [String]
-checkIterator _ "" _ _ results = results
+checkIterator frame (_:xs) index (last_state:history) results = result3 
+  where
+    end = findEndBlock xs 1 (index+1)
+    atom = take (end-1) xs
+    valid_states = checkStates frame atom [last_state] [] results
+    result0 = ("Frame válido":reuslts)
+    result1 = if lenght valid_states == 1 && any (\(last_state, atom, next) -> next == last_state) (relations frame) then
+        ("Frame válido":results)
+        else
+          (["!",("Incompatibilidade no estado "++last_state++", no index "++(show index))]++results)
+        
+    result2 = if head result1 == "!" then checkFrame frame atom (index+1) history results1 else result1
+    result3 = checkFrame frame (drop (length xs - end) xs) end history result2
+
+checkStates ::  Frame -> String -> [String] -> [String] -> [String]
+checkIterator frame atom (last_state:history) relations_history results
+  | all (\state -> state `elem` states frame) (last_state:history) = (last_state:history)
+  | all (\(c,atom,n) -> (c,atom,n) `elem` relations_history) relations frame = (last_state:history)
+  | any (\(last_state, atom, next) -> ( next /= last_state && not ((last_state, atom, next) `elem` relations_history))) (relations frame) = checkStates frame atom (next:(last_state:history)) ((last_state, atom, next):relations_history) ("Frame válido":results)
+  | null history = (history++[last_state])
+  | otherwise = checkStates frame atom (head history:(history++[last_state])) relations_history results
 
 checkExists :: Frame -> String -> Int -> [String] -> [String] -> [String]
 checkExists _ "" _ _ results = results
