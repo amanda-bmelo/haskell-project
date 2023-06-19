@@ -14,11 +14,11 @@ addProblem = do
     statesInput <- getLine
     let new_states = statesInput
 
-    putStrLn "Digite as relações no formato 'estado1 rotulo estado2':"
+    putStrLn "Digite as relações no formato '1A1 1A2...':"
     relationsInput <- getLine
     let new_relations = readRelations relationsInput
 
-    putStrLn "Digite o , sabendo que P representa o programa:"
+    putStrLn "Digite o programa:"
     programInput <- getLine
 
     return (Frame new_states new_relations, programInput)
@@ -26,13 +26,13 @@ addProblem = do
     return (defaultFrame, defaultProgram)
   where
     readRelations :: String -> [[Char]]
-    readRelations input = read $ "[" ++ input ++ "]"
+    readRelations input = words input
 
     defaultFrame :: Frame
-    defaultFrame = Frame ['1', '2'] [['1', 'A', '2'], ['1', 'B', '1'], ['2', 'A', '2']]
+    defaultFrame = Frame ['1','2','3'] [['1', 'A', '2'], ['1', 'A', '1'], ['2','A','3'], ['2','A','2'], ['3', 'B', '3']] -- regra: relação consigo mesmo vem por último
 
     defaultProgram :: String
-    defaultProgram = "v(*(;(A,B)),Y)" -- Inválido
+    defaultProgram = "v(;(*(;(A,A)),y),B)" -- Válido
 
 -- Função realizada por Gyselle
 main :: IO ()
@@ -46,15 +46,15 @@ main = do
   print (isValidFrame frame input);
   return ();
 
--- Função realizada por Amanda
+-- Função realizada por Gyselle
 isValidFrame :: Frame -> String -> String
 isValidFrame frame program
   | (head (last result)) == "!" = last (take 2 (last result))
-  | otherwise =  "Frame valido."
-  where result = checkFrame frame program 0 [[['0', '0', head(states frame)]],[]]
+  | otherwise =  head (last result)
+  where result = checkFrame frame program 0 [[[head(states frame)]],[]]
 
--- Função realizada por Amanda
-checkFrame :: Frame -> String -> Int -> [[String]] -> [[String]]
+-- Função realizada por Gyselle
+checkFrame :: Frame -> String -> Int -> [[String]] -> [[String]] 
 checkFrame frame program index path
   | program == "" = path
   | x == ';' = checkSequence frame xs (index+1) path
@@ -84,23 +84,20 @@ checkAtom frame program index path
 checkSequence :: Frame -> String -> Int -> [[String]] -> [[String]]
 checkSequence frame program index path = path3 
   where
-    xs = tail program
-    end = findEndBlock xs 1 1
-    middle = findMiddleBlock xs 1 1
-    listSeq = listBlock xs (middle-2) (end-2)
-    fst_part = head listSeq
-    scd_part = last listSeq
+    xs = tail program -- ;(A,B) --> program=(A,B) --> A,B)
+    end = findEndBlock xs 1 1 
+    middle = findMiddleBlock xs 1 1 
+    listSeq = listBlock xs (middle-2) (end-2) -- [A,B]
+    fst_part = head listSeq -- A
+    scd_part = last listSeq -- B
     path1 = 
-      if  (head fst_part) == '*' then 
-        checkFrame frame (take (end-1) xs) (index+1) path -- Fazer um print para checar
+      if (head fst_part) == '*' then 
+        checkFrame frame ("!"++(head listSeq)++","++(last listSeq)) (index+1) path
       else
         checkFrame frame fst_part (index+1) path
     path2 = 
-      if (head (last path1)) /= "!" then 
-        if  (head scd_part) == '*' then 
-          checkFrame frame (take (end-1) xs) (index+middle) path1 -- Fazer um print para checar
-        else
-          checkFrame frame scd_part (index+middle) path1
+      if (head (last path1)) /= "!" && (head fst_part) /= '*' then 
+        checkFrame frame scd_part (index+middle) path1
       else 
         path1
     path3 = checkFrame frame (drop (end-1) xs) (end+index) path2
@@ -109,32 +106,27 @@ checkSequence frame program index path = path3
 checkOr :: Frame -> String -> Int -> [[String]] -> [[String]]
 checkOr frame program index path = path3 
   where
-    (_:xs) = program
+    xs = tail program
     end = findEndBlock xs 1 1
     middle = findMiddleBlock xs 1 1
     listSeq = listBlock xs (middle-2) (end-2)
     fst_part = head listSeq
     scd_part = last listSeq
-    path1 = 
-      if  (head fst_part) == '*' then 
-        checkFrame frame (take (end-1) xs) (index+1) path -- Fazer um print para checar
-      else
-        checkFrame frame fst_part (index+1) path
+    path1 = checkFrame frame fst_part (index+1) path
     path2 = 
       if (head (last path1)) == "!" then 
-        if  (head scd_part) == '*' then 
-          checkFrame frame (take (end-1) xs) (index+middle) path -- Fazer um print para checar
-        else
-          checkFrame frame scd_part (index+middle) path
+        checkFrame frame scd_part (index+middle) path
       else path1
     path3 = checkFrame frame (drop (end-1) xs) (end+index) path2
 
 -- Função realizada por Amanda
 checkIterator :: Frame -> String -> Int -> [[String]] -> [[String]]
 checkIterator frame program index path
+  | x == '!' = checkIteratorSequence frame xs index path
   | (head (last path1)) /= "!" = [history,(["Frame valido"]++results)]
   | otherwise = tryPath frame block (index+1) path1 last_relation
   where
+    x = head program
     xs = tail program
     end = findEndBlock xs 1 1
     block = take (end-2) xs
@@ -142,6 +134,21 @@ checkIterator frame program index path
     history = head path1
     results = last path1
     last_relation = head (head path)
+
+-- Função realizada por Amanda
+checkIteratorSequence :: Frame -> String -> Int -> [[String]] -> [[String]]
+checkIteratorSequence frame program index path
+  | head first_results == "!" = first_try
+  | head second_results /= "!" = second_try
+  | otherwise = checkIteratorSequence frame program index first_try
+  where
+    middle = findMiddleBlock program 1 1
+    first_part = take middle (tail program)
+    second_part = drop middle (tail program)
+    first_try = tryPath frame first_part index path (head (head path))
+    first_results = last first_try
+    second_try = checkFrame frame second_part index first_try
+    second_results = last second_try
       
 -- Função realizada por Gyselle
 checkExists :: Frame -> String -> Int -> [[String]] -> [[String]]
@@ -155,12 +162,12 @@ checkExists _ _ _ path = [history, (["Frame valido"]++results)]
 findPath :: [[Char]] -> [Char] -> [Char]
 findPath list target 
   | list == [] = []
-  | current == last_state && trigger == label = [last_state, label, next]
+  | current_state == last_state && trigger == label = [last_state, label, next]
   | otherwise = findPath xs target 
   where
     relation = head list
     xs = tail list
-    current = head relation
+    current_state = head relation
     trigger = last (take 2 relation)
     next = last relation
     last_state = head target
@@ -176,8 +183,8 @@ tryPath frame program index path last_relation
   where
     history = head path
     results = last path
-    new_frame = deleteRelation frame (head history)
-    new_try = checkFrame new_frame program index [(drop 1 history), (drop 2 results)]
+    new_frame = if not (null results) && (head results) == "!" then deleteRelation frame (head history) else frame
+    new_try = if not (null results) && (head results) == "!" then checkFrame new_frame program index [(drop 1 history), (drop 2 results)] else checkFrame new_frame program index path
     new_history = head new_try
     new_results = last new_try
 

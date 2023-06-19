@@ -6,3 +6,6 @@ Implementar um programa em Haskell que receba como entrada um frame PDL (i.e. um
 
 ### Compilação
 ghc --make main
+./main
+
+### Relatório
