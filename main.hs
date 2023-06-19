@@ -1,138 +1,231 @@
 data Frame = Frame {
-  states :: [String], 
-  relations :: [(String, String, String)]
+  states :: [Char], 
+  relations :: [[Char]]
 }
 
 
 -- Função realizada por Gyselle
-adicionarProblema :: IO (Frame, String)
-adicionarProblema = do
+addProblem :: IO (Frame, String)
+addProblem = do
   putStrLn "Deseja adicionar um problema? (S/N)"
-  resposta <- getLine
-  if resposta == "S" || resposta == "s" then do
-    putStrLn "Digite os estados separados por espaço:"
-    estadosInput <- getLine
-    let estados = words estadosInput
+  answer <- getLine
+  if answer == "S" || answer == "s" then do
+    putStrLn "Digite os estados juntos, sabendo que cada estado é um caracter:"
+    statesInput <- getLine
+    let new_states = statesInput
 
     putStrLn "Digite as relações no formato 'estado1 rotulo estado2':"
-    relacoesInput <- getLine
-    let relacoes = lerRelacoes relacoesInput
+    relationsInput <- getLine
+    let new_relations = readRelations relationsInput
 
-    putStrLn "Digite o programa, sabendo que P representa o programa:"
-    programaInput <- getLine
+    putStrLn "Digite o , sabendo que P representa o programa:"
+    programInput <- getLine
 
-    return (Frame estados relacoes, programaInput)
+    return (Frame new_states new_relations, programInput)
   else
     return (defaultFrame, defaultProgram)
   where
-    lerRelacoes :: String -> [(String, String, String)]
-    lerRelacoes input = read $ "[" ++ input ++ "]"
+    readRelations :: String -> [[Char]]
+    readRelations input = read $ "[" ++ input ++ "]"
 
     defaultFrame :: Frame
-    defaultFrame = Frame ["1", "2"] [("1", "A", "2"), ("1", "B", "1"), ("2", "A", "2")]
+    defaultFrame = Frame ['1', '2'] [['1', 'A', '2'], ['1', 'B', '1'], ['2', 'A', '2']]
 
     defaultProgram :: String
-    defaultProgram = "v(;(*(A),B),A)" -- (A* ; B) v A || T=14
+    defaultProgram = "v(*(;(A,B)),Y)" -- Inválido
 
 -- Função realizada por Gyselle
 main :: IO ()
 main = do
-  (frame, input) <- adicionarProblema
-  print (head (states frame));
-  print input;
+  (frame, input) <- addProblem
+  putStr "\n--- Estados do Frame ---\n";
+  print (states frame);
+  putStr "\n--- Relacoes do Frame ---\n";
+  print (relations frame);
+  putStr ("\n--- Programa ---\n"++input++"\n\n");
+  print (isValidFrame frame input);
   return ();
 
+-- Função realizada por Amanda
 isValidFrame :: Frame -> String -> String
-isValidFrame frame programa
-  | x == "!" = head result
-  | otherwise =  "Frame válido."
-  where (x:result) = checkFrame frame programa 0 (take 1 (states frame)) []
+isValidFrame frame program
+  | (head (last result)) == "!" = last (take 2 (last result))
+  | otherwise =  "Frame valido."
+  where result = checkFrame frame program 0 [[['0', '0', head(states frame)]],[]]
 
-checkFrame :: Frame -> String -> Int -> [String] -> [String] -> [String]
-checkFrame _ "" _ _ results = results
-checkFrame frame (x:xs) index history results
-  | x == ';' = checkSequence frame xs (index+1) history results
-  | x == 'v' = checkOr frame xs (index+1) history results
-  | x == '*' = checkIterator frame xs (index+1) history results
-  | x == '?' = checkExists frame xs (index+1) history results
-  | otherwise = checkAtom frame xs (index+1) history results
+-- Função realizada por Amanda
+checkFrame :: Frame -> String -> Int -> [[String]] -> [[String]]
+checkFrame frame program index path
+  | program == "" = path
+  | x == ';' = checkSequence frame xs (index+1) path
+  | x == 'v' = checkOr frame xs (index+1) path
+  | x == '*' = checkIterator frame xs (index+1) path
+  | x == '?' = checkExists frame xs (index+1) path
+  | otherwise = checkAtom frame program index path
+  where 
+    x = head program
+    xs = tail program
 
-checkAtom :: Frame -> String -> Int -> [String] -> [String] -> [String]
-checkAtom frame (x:xs) index (last_state:history) results
-  | any (\(current, alpha, next) -> (alpha == [x] && current == last_state)) (relations frame) = checkFrame frame xs (index+1) (next:history) ("Frame válido":results)
-  | otherwise = checkFrame frame xs (index+1) history (["!",("Incompatibilidade no estado "++last_state++", no index "++(show index))]++results)
-
-checkSequence :: Frame -> String -> Int -> [String] -> [String] -> [String]
-checkSequence frame (_:xs) index history results = result3 
+-- Função realizada por Gyselle
+checkAtom :: Frame -> String -> Int -> [[String]] -> [[String]]
+checkAtom frame program index path
+  | not (null new_relation) = checkFrame frame xs (index+1) [([new_relation]++history), (["Frame valido"]++results)]
+  | otherwise = checkFrame frame xs (index+1) [history, (["!",("Incompatibilidade no estado "++(show last_state)++", no index "++(show index))]++results)]
   where
-    end = findEndBlock xs 1 (index+1)
+    x = head program
+    xs = tail program
+    history = head path
+    results = last path
+    relation = head history
+    last_state = last relation
+    new_relation = findPath (relations frame) [last_state, x]
+
+-- Função realizada por Amanda
+checkSequence :: Frame -> String -> Int -> [[String]] -> [[String]]
+checkSequence frame program index path = path3 
+  where
+    xs = tail program
+    end = findEndBlock xs 1 1
     middle = findMiddleBlock xs 1 1
-    listSeq = listBlock xs (middle-2) (end-index-2)
-    result1 = checkFrame frame (head listSeq) (index+1) history results
-    result2 = if head result1 /= "!" then checkFrame frame (last listSeq) (index+middle) history results else result1
-    result3 = checkFrame frame (drop (length xs - end) xs) end history result2
-  
-
-checkOr :: Frame -> String -> Int -> [String] -> [String] -> [String]
-checkOr frame (_:xs) index history results = result3 
-  where
-    end = findEndBlock xs 1 (index+1)
-    middle = findMiddleBlock xs 1 1
-    listSeq = listBlock xs (middle-2) (end-index-2)
-    result1 = checkFrame frame (head listSeq) (index+1) history results
-    result2 = if head result1 == "!" then checkFrame frame (last listSeq) (index+middle) history results else result1
-    result3 = checkFrame frame (drop (length xs - end) xs) end history result2
-
-checkIterator :: Frame -> String -> Int -> [String] -> [String] -> [String]
-checkIterator frame (_:xs) index (last_state:history) results = result3 
-  where
-    end = findEndBlock xs 1 (index+1)
-    atom = take (end-1) xs
-    valid_states = checkStates frame atom [last_state] [] results
-    result0 = ("Frame válido":reuslts)
-    result1 = if lenght valid_states == 1 && any (\(last_state, atom, next) -> next == last_state) (relations frame) then
-        ("Frame válido":results)
+    listSeq = listBlock xs (middle-2) (end-2)
+    fst_part = head listSeq
+    scd_part = last listSeq
+    path1 = 
+      if  (head fst_part) == '*' then 
+        checkFrame frame (take (end-1) xs) (index+1) path -- Fazer um print para checar
+      else
+        checkFrame frame fst_part (index+1) path
+    path2 = 
+      if (head (last path1)) /= "!" then 
+        if  (head scd_part) == '*' then 
+          checkFrame frame (take (end-1) xs) (index+middle) path1 -- Fazer um print para checar
         else
-          (["!",("Incompatibilidade no estado "++last_state++", no index "++(show index))]++results)
-        
-    result2 = if head result1 == "!" then checkFrame frame atom (index+1) history results1 else result1
-    result3 = checkFrame frame (drop (length xs - end) xs) end history result2
+          checkFrame frame scd_part (index+middle) path1
+      else 
+        path1
+    path3 = checkFrame frame (drop (end-1) xs) (end+index) path2
+  
+-- Função realizada por Amanda
+checkOr :: Frame -> String -> Int -> [[String]] -> [[String]]
+checkOr frame program index path = path3 
+  where
+    (_:xs) = program
+    end = findEndBlock xs 1 1
+    middle = findMiddleBlock xs 1 1
+    listSeq = listBlock xs (middle-2) (end-2)
+    fst_part = head listSeq
+    scd_part = last listSeq
+    path1 = 
+      if  (head fst_part) == '*' then 
+        checkFrame frame (take (end-1) xs) (index+1) path -- Fazer um print para checar
+      else
+        checkFrame frame fst_part (index+1) path
+    path2 = 
+      if (head (last path1)) == "!" then 
+        if  (head scd_part) == '*' then 
+          checkFrame frame (take (end-1) xs) (index+middle) path -- Fazer um print para checar
+        else
+          checkFrame frame scd_part (index+middle) path
+      else path1
+    path3 = checkFrame frame (drop (end-1) xs) (end+index) path2
 
-checkStates ::  Frame -> String -> [String] -> [String] -> [String]
-checkIterator frame atom (last_state:history) relations_history results
-  | all (\state -> state `elem` states frame) (last_state:history) = (last_state:history)
-  | all (\(c,atom,n) -> (c,atom,n) `elem` relations_history) relations frame = (last_state:history)
-  | any (\(last_state, atom, next) -> ( next /= last_state && not ((last_state, atom, next) `elem` relations_history))) (relations frame) = checkStates frame atom (next:(last_state:history)) ((last_state, atom, next):relations_history) ("Frame válido":results)
-  | null history = (history++[last_state])
-  | otherwise = checkStates frame atom (head history:(history++[last_state])) relations_history results
+-- Função realizada por Amanda
+checkIterator :: Frame -> String -> Int -> [[String]] -> [[String]]
+checkIterator frame program index path
+  | (head (last path1)) /= "!" = [history,(["Frame valido"]++results)]
+  | otherwise = tryPath frame block (index+1) path1 last_relation
+  where
+    xs = tail program
+    end = findEndBlock xs 1 1
+    block = take (end-2) xs
+    path1 = checkFrame frame block (index+1) path
+    history = head path1
+    results = last path1
+    last_relation = head (head path)
+      
+-- Função realizada por Gyselle
+checkExists :: Frame -> String -> Int -> [[String]] -> [[String]]
+checkExists _ _ _ path = [history, (["Frame valido"]++results)]
+  where
+    history = head path 
+    results = last path
 
-checkExists :: Frame -> String -> Int -> [String] -> [String] -> [String]
-checkExists _ "" _ _ results = results
-checkExists frame (x:xs) index history results =
-  if x == '?'
-    then
-      let result1 = checkFrame frame xs (index+1) history results
-          result2 = if head result1 /= "!" then checkFrame frame (drop 1 xs) (index+1) history results else result1
-      in checkExists frame (dropWhile (/= ';') xs) (index+1) history result2
-    else
-      checkSequence frame (x:xs) index history results
+-- Funções auxiliares
+-- Função realizada por Gyselle
+findPath :: [[Char]] -> [Char] -> [Char]
+findPath list target 
+  | list == [] = []
+  | current == last_state && trigger == label = [last_state, label, next]
+  | otherwise = findPath xs target 
+  where
+    relation = head list
+    xs = tail list
+    current = head relation
+    trigger = last (take 2 relation)
+    next = last relation
+    last_state = head target
+    label = last target
 
+-- Função realizada por Amanda
+tryPath :: Frame -> String -> Int -> [[String]] -> [Char] -> [[String]]
+tryPath frame program index path last_relation
+  | not (any(\relation -> (head relation)==(last last_relation)) (relations frame)) = [history, (["!",("Incompatibilidade no estado "++(show (last last_relation))++", no index "++(show index))]++results)]
+  | (head new_results) /= "!" = [new_history, (["Frame valido"]++new_results)]
+  | (head new_history) == last_relation = [history, (["!",("Incompatibilidade no estado "++(show (last last_relation))++", no index "++(show index))]++results)]
+  | otherwise = tryPath frame program index path last_relation
+  where
+    history = head path
+    results = last path
+    new_frame = deleteRelation frame (head history)
+    new_try = checkFrame new_frame program index [(drop 1 history), (drop 2 results)]
+    new_history = head new_try
+    new_results = last new_try
+
+-- Função realizada por Amanda
+deleteRelation :: Frame -> [Char] -> Frame
+deleteRelation frame relation
+  | index /= -1 = Frame (states frame) new_relations
+  | otherwise = frame
+  where 
+    index = findRelation relation (relations frame) 0
+    start =  take index (relations frame)
+    end = drop (index+1) (relations frame)
+    new_relations = start++end
+
+-- Função realizada por Amanda
+findRelation :: [Char] -> [[Char]] -> Int -> Int
+findRelation relation list index
+  | list == [] = -1
+  | relation == x = index
+  | otherwise = findRelation relation xs (index+1)
+  where 
+    x = head list
+    xs = tail list
+
+-- Função realizada por Amanda
 findEndBlock :: String -> Int -> Int -> Int
-findEndBlock _ 0 end = end
-findEndBlock (x:program) opened end
-  | x == '(' = findEndBlock program (opened+1) (end+1)
-  | x == ')' = findEndBlock program (opened-1) (end+1)
-  | otherwise = findEndBlock program opened (end+1)
+findEndBlock program opened end
+  | opened == 0 = end
+  | x == '(' = findEndBlock xs (opened+1) (end+1)
+  | x == ')' = findEndBlock xs (opened-1) (end+1)
+  | otherwise = findEndBlock xs opened (end+1)
+  where
+    x = head program
+    xs = tail program
 
+-- Função realizada por Amanda
 findMiddleBlock :: String -> Int -> Int -> Int
-findMiddleBlock _ 0 end = end
-findMiddleBlock (x:program) comma end
-  | x == 'v' = findMiddleBlock program (comma+1) (end+1)
-  | x == ';' = findMiddleBlock program (comma+1) (end+1)
-  | x == ',' = findMiddleBlock program (comma-1) (end+1)
-  | otherwise = findMiddleBlock program comma (end+1)
+findMiddleBlock program comma end
+  | comma == 0 = end
+  | x == 'v' || x == ';' = findMiddleBlock xs (comma+1) (end+1)
+  | x == ',' = findMiddleBlock xs (comma-1) (end+1)
+  | otherwise = findMiddleBlock xs comma (end+1)
+  where
+    x = head program
+    xs = tail program
 
-listBlock :: String -> Int -> Int -> [String]
-listBlock block endBlock middleBlock = [take middleBlock block, drop (endBlock-middleBlock-1) block]
+-- Função realizada por Amanda
+listBlock :: String -> Int -> Int  -> [String]
+listBlock block middleBlock endBlock = [take middleBlock block, drop (middleBlock+1) (take endBlock block)]
   
 
